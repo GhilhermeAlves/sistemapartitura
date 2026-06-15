@@ -1,0 +1,1232 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EXPLORADOR • SISTEMA DE PARTITURAS</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;700;900&family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+    <script th:inline="javascript">
+        const ARVORE_PASTAS = /*[[${arvorePastas}]]*/ [];
+        const PASTA_SELECIONADA_ID = /*[[${pastaSelecionadaId}]]*/ '';
+    </script>
+
+    <style>
+        *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+        :root {
+            --bg-primary: #0a0b10;
+            --bg-secondary: #0f111a;
+            --bg-card: rgba(18, 22, 40, 0.65);
+            --cyan: #00f0ff;
+            --cyan-glow: rgba(0, 240, 255, 0.35);
+            --purple: #8b5cf6;
+            --purple-glow: rgba(139, 92, 246, 0.30);
+            --green: #00ff88;
+            --text-primary: #e2e8f0;
+            --text-secondary: #8892b0;
+            --border-subtle: rgba(0, 240, 255, 0.10);
+            --radius: 14px;
+            --sidebar-w: 280px;
+        }
+
+        body {
+            font-family: 'Inter', system-ui, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            min-height: 100vh;
+            display: flex;
+            background-image:
+                radial-gradient(ellipse 80% 60% at 50% -20%, rgba(0, 240, 255, 0.04) 0%, transparent 70%),
+                radial-gradient(ellipse 50% 40% at 80% 80%, rgba(139, 92, 246, 0.03) 0%, transparent 70%),
+                radial-gradient(ellipse 40% 30% at 20% 90%, rgba(0, 255, 136, 0.02) 0%, transparent 60%);
+            background-attachment: fixed;
+        }
+
+        .scanline {
+            position: fixed;
+            inset: 0;
+            z-index: 9999;
+            pointer-events: none;
+            background: repeating-linear-gradient(
+                0deg,
+                transparent,
+                transparent 2px,
+                rgba(0, 240, 255, 0.015) 2px,
+                rgba(0, 240, 255, 0.015) 4px
+            );
+        }
+
+        .app-layout {
+            display: flex;
+            width: 100%;
+            min-height: 100vh;
+        }
+
+        /* ===== SIDEBAR ===== */
+        .sidebar {
+            width: var(--sidebar-w);
+            flex-shrink: 0;
+            height: 100vh;
+            position: sticky;
+            top: 0;
+            overflow-y: auto;
+            background: rgba(12, 14, 22, 0.85);
+            backdrop-filter: blur(24px);
+            -webkit-backdrop-filter: blur(24px);
+            border-right: 1px solid rgba(0, 240, 255, 0.08);
+            box-shadow: 4px 0 40px rgba(0, 0, 0, 0.5), inset -1px 0 0 rgba(0, 240, 255, 0.05);
+            display: flex;
+            flex-direction: column;
+            z-index: 10;
+            transition: width 0.3s ease-in-out, transform 0.3s ease-in-out, padding 0.3s ease-in-out, border 0.3s ease-in-out;
+        }
+
+        .sidebar.collapsed {
+            width: 0;
+            min-width: 0;
+            flex-basis: 0;
+            padding: 0;
+            border: none;
+            overflow: hidden;
+            transform: translateX(-100%);
+        }
+
+        .sidebar::-webkit-scrollbar { width: 4px; }
+        .sidebar::-webkit-scrollbar-track { background: transparent; }
+        .sidebar::-webkit-scrollbar-thumb { background: rgba(0, 240, 255, 0.15); border-radius: 10px; }
+
+        .sidebar-header {
+            padding: 1.5rem 1rem 1rem 1.25rem;
+            border-bottom: 1px solid rgba(0, 240, 255, 0.06);
+            flex-shrink: 0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .sidebar-header-left {
+            min-width: 0;
+            flex: 1;
+        }
+
+        .sidebar-collapse-btn {
+            flex-shrink: 0;
+            width: 30px;
+            height: 30px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: transparent;
+            border: 1px solid rgba(0, 240, 255, 0.20);
+            border-radius: 6px;
+            cursor: pointer;
+            color: var(--cyan);
+            box-shadow: 0 0 6px rgba(0, 240, 255, 0.10);
+            transition: border-color 0.25s, color 0.25s, box-shadow 0.25s, transform 0.2s;
+            padding: 0;
+            line-height: 1;
+            position: relative;
+        }
+
+        .sidebar-collapse-btn svg {
+            width: 16px;
+            height: 16px;
+            display: block;
+        }
+
+        .sidebar-collapse-btn:hover {
+            border-color: var(--green);
+            color: var(--green);
+            box-shadow: 0 0 16px rgba(0, 255, 136, 0.25);
+            transform: scale(1.05);
+        }
+
+        .sidebar-collapse-btn:active {
+            transform: scale(0.92);
+        }
+
+        /* Open handle (visible when sidebar is collapsed) */
+        .sidebar-open-handle {
+            position: fixed;
+            left: 0;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 22px;
+            height: 52px;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            background: rgba(12, 14, 22, 0.80);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(0, 240, 255, 0.12);
+            border-left: none;
+            border-radius: 0 6px 6px 0;
+            cursor: pointer;
+            color: var(--cyan);
+            z-index: 20;
+            transition: border-color 0.25s, color 0.25s, box-shadow 0.25s, left 0.3s ease-in-out;
+        }
+
+        .sidebar-open-handle svg {
+            width: 14px;
+            height: 14px;
+            display: block;
+        }
+
+        .sidebar-open-handle:hover {
+            border-color: var(--green);
+            color: var(--green);
+            box-shadow: 4px 0 16px rgba(0, 255, 136, 0.20);
+        }
+
+        .sidebar.collapsed + .sidebar-open-handle {
+            display: flex;
+        }
+
+        .sidebar-header h2 {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 0.7rem;
+            font-weight: 600;
+            letter-spacing: 0.2em;
+            text-transform: uppercase;
+            color: var(--cyan);
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .sidebar-header h2::before {
+            content: '';
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--green);
+            box-shadow: 0 0 10px var(--green);
+            animation: pulse-dot 2s ease-in-out infinite;
+        }
+
+        @keyframes pulse-dot {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.3; }
+        }
+
+        .sidebar-header .sub {
+            font-size: 0.6rem;
+            color: var(--text-secondary);
+            opacity: 0.4;
+            font-family: 'JetBrains Mono', monospace;
+            letter-spacing: 0.08em;
+            margin-top: 0.3rem;
+        }
+
+        .sidebar-folders {
+            padding: 0.75rem 0;
+            flex: 1;
+        }
+
+        /* Root folder link */
+        .folder-root {
+            padding: 0.5rem 1.25rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+            transition: all 0.2s;
+            border-left: 2px solid transparent;
+            cursor: pointer;
+        }
+
+        .folder-root:hover {
+            background: rgba(0, 240, 255, 0.04);
+            color: var(--text-primary);
+        }
+
+        .folder-root.active {
+            color: var(--cyan);
+            border-left-color: var(--cyan);
+            background: rgba(0, 240, 255, 0.06);
+        }
+
+        .folder-root .root-icon {
+            flex-shrink: 0;
+            font-size: 0.9rem;
+        }
+
+        .folder-root a {
+            color: inherit;
+            text-decoration: none;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            width: 100%;
+        }
+
+        .folder-root .root-badge {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.55rem;
+            letter-spacing: 0.05em;
+            padding: 0.1rem 0.4rem;
+            border-radius: 4px;
+            background: rgba(0, 240, 255, 0.08);
+            color: var(--cyan);
+            opacity: 0.6;
+            margin-left: auto;
+        }
+
+        /* Folder items rendered by JS */
+        .folder-item {
+            display: flex;
+            align-items: center;
+            gap: 0.35rem;
+            padding: 0.4rem 1.25rem;
+            font-size: 0.82rem;
+            color: var(--text-secondary);
+            transition: all 0.2s ease;
+            border-left: 2px solid transparent;
+            cursor: pointer;
+            position: relative;
+        }
+
+        .folder-item:hover {
+            background: rgba(0, 240, 255, 0.04);
+            color: var(--text-primary);
+        }
+
+        .folder-item.active {
+            color: var(--cyan);
+            border-left-color: var(--cyan);
+            background: rgba(0, 240, 255, 0.06);
+        }
+
+        .folder-item.active::after {
+            content: '';
+            position: absolute;
+            right: 0.75rem;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 4px;
+            height: 4px;
+            border-radius: 50%;
+            background: var(--cyan);
+            box-shadow: 0 0 10px var(--cyan-glow);
+        }
+
+        .folder-link {
+            display: flex;
+            align-items: center;
+            gap: 0.35rem;
+            color: inherit;
+            text-decoration: none;
+            width: 100%;
+            min-width: 0;
+        }
+
+        .folder-arrow {
+            flex-shrink: 0;
+            font-size: 0.55rem;
+            color: var(--text-secondary);
+            opacity: 0.5;
+            transition: opacity 0.2s;
+            width: 14px;
+            text-align: center;
+            display: inline-block;
+            cursor: pointer;
+            user-select: none;
+            padding: 2px 0;
+        }
+
+        .folder-arrow.has {
+            opacity: 0.8;
+        }
+
+        .folder-arrow.has:hover {
+            opacity: 1;
+            color: var(--cyan);
+        }
+
+        .folder-arrow.empty {
+            visibility: hidden;
+        }
+
+        .folder-icon {
+            flex-shrink: 0;
+            font-size: 0.85rem;
+            line-height: 1;
+        }
+
+        .folder-label {
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            font-weight: 400;
+            cursor: pointer;
+        }
+
+        .folder-label:hover {
+            color: var(--cyan);
+        }
+
+        .folder-children {
+            overflow: hidden;
+            transition: max-height 0.25s ease, opacity 0.2s ease;
+            max-height: 2000px;
+            opacity: 1;
+        }
+
+        .folder-children.collapsed {
+            display: none;
+            max-height: 0;
+            opacity: 0;
+        }
+
+        /* Sidebar divider */
+        .sidebar-divider {
+            height: 1px;
+            background: linear-gradient(90deg, transparent, rgba(0, 240, 255, 0.08), transparent);
+            margin: 0.5rem 1.25rem;
+        }
+
+        /* ===== MAIN CONTENT ===== */
+        .content {
+            flex: 1;
+            min-width: 0;
+            padding: 2rem 2.5rem 4rem;
+            max-width: 100%;
+        }
+
+        .content-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 2rem;
+            flex-wrap: wrap;
+            gap: 1rem;
+        }
+
+        .content-header .breadcrumb {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.65rem;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            color: var(--text-secondary);
+            opacity: 0.5;
+        }
+
+        .content-header .breadcrumb .sep {
+            color: var(--cyan);
+            opacity: 0.3;
+        }
+
+        .content-header .breadcrumb strong {
+            color: var(--cyan);
+            opacity: 0.9;
+            font-weight: 500;
+        }
+
+        .content-title {
+            font-family: 'Orbitron', sans-serif;
+            font-size: clamp(1.1rem, 2.5vw, 1.6rem);
+            font-weight: 700;
+            letter-spacing: 0.03em;
+            text-transform: uppercase;
+            background: linear-gradient(135deg, var(--cyan) 0%, var(--purple) 60%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        /* SEARCH */
+        .search-section {
+            margin-bottom: 2rem;
+        }
+
+        .search-wrapper {
+            position: relative;
+            max-width: 700px;
+        }
+
+        .search-wrapper::before {
+            content: '';
+            position: absolute;
+            inset: -2px;
+            border-radius: 60px;
+            background: linear-gradient(135deg, var(--cyan), var(--purple), var(--cyan));
+            background-size: 300% 300%;
+            opacity: 0;
+            transition: opacity 0.5s ease;
+            z-index: 0;
+            animation: glow-rotate 3s ease-in-out infinite;
+        }
+
+        .search-wrapper:focus-within::before {
+            opacity: 0.7;
+        }
+
+        @keyframes glow-rotate {
+            0%, 100% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+        }
+
+        .search-inner {
+            position: relative;
+            z-index: 1;
+            display: flex;
+            align-items: center;
+            background: rgba(15, 17, 26, 0.85);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border: 1px solid rgba(0, 240, 255, 0.10);
+            border-radius: 60px;
+            padding: 0.35rem 0.35rem 0.35rem 1.5rem;
+            transition: border-color 0.3s, box-shadow 0.3s;
+        }
+
+        .search-wrapper:focus-within .search-inner {
+            border-color: rgba(0, 240, 255, 0.25);
+            box-shadow: 0 0 40px rgba(0, 240, 255, 0.08), inset 0 0 30px rgba(0, 240, 255, 0.03);
+        }
+
+        .search-icon {
+            flex-shrink: 0;
+            color: var(--text-secondary);
+            opacity: 0.5;
+            display: flex;
+            align-items: center;
+            margin-right: 0.75rem;
+        }
+
+        .search-icon svg {
+            width: 20px;
+            height: 20px;
+        }
+
+        .search-inner input {
+            flex: 1;
+            background: transparent;
+            border: none;
+            outline: none;
+            color: var(--text-primary);
+            font-family: 'Inter', sans-serif;
+            font-size: 1rem;
+            font-weight: 400;
+            padding: 0.9rem 0;
+            min-width: 0;
+        }
+
+        .search-inner input::placeholder {
+            color: var(--text-secondary);
+            opacity: 0.5;
+            font-weight: 300;
+        }
+
+        .search-inner button {
+            flex-shrink: 0;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-family: 'JetBrains Mono', monospace;
+            font-weight: 500;
+            font-size: 0.8rem;
+            letter-spacing: 0.05em;
+            text-transform: uppercase;
+            background: linear-gradient(135deg, var(--cyan), #00b8cc);
+            color: #0a0b10;
+            border: none;
+            padding: 0.75rem 1.6rem;
+            border-radius: 60px;
+            cursor: pointer;
+            transition: all 0.25s ease;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .search-inner button::after {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(135deg, rgba(255,255,255,0.15), transparent);
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+
+        .search-inner button:hover::after {
+            opacity: 1;
+        }
+
+        .search-inner button:hover {
+            box-shadow: 0 0 30px rgba(0, 240, 255, 0.35);
+            transform: scale(1.02);
+        }
+
+        .search-inner button:active {
+            transform: scale(0.97);
+        }
+
+        .search-inner button svg {
+            width: 16px;
+            height: 16px;
+        }
+
+        /* STATUS BAR */
+        .status-bar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0.75rem 0.25rem;
+            margin-bottom: 1.5rem;
+            border-bottom: 1px solid rgba(0, 240, 255, 0.06);
+        }
+
+        .status-bar .count {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+            letter-spacing: 0.03em;
+        }
+
+        .status-bar .count strong {
+            color: var(--cyan);
+            font-weight: 600;
+        }
+
+        .status-bar .label {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.7rem;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+            color: var(--text-secondary);
+            opacity: 0.5;
+        }
+
+        /* GRID */
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(min(300px, 100%), 1fr));
+            gap: 1rem;
+        }
+
+        /* CARD */
+        .card {
+            position: relative;
+            background: var(--bg-card);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid var(--border-subtle);
+            border-radius: var(--radius);
+            padding: 1.25rem 1.5rem;
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            transition: all 0.35s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+            cursor: default;
+            overflow: hidden;
+        }
+
+        .card::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            border-radius: inherit;
+            background: linear-gradient(135deg, rgba(0, 240, 255, 0.03), transparent 60%);
+            opacity: 0;
+            transition: opacity 0.4s;
+            pointer-events: none;
+        }
+
+        .card::after {
+            content: '';
+            position: absolute;
+            inset: -1px;
+            border-radius: inherit;
+            background: linear-gradient(135deg, var(--cyan), var(--purple), var(--cyan));
+            background-size: 300% 300%;
+            opacity: 0;
+            transition: opacity 0.4s ease;
+            z-index: -1;
+            animation: glow-rotate 3s ease-in-out infinite;
+            -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+            -webkit-mask-composite: xor;
+            mask-composite: exclude;
+            padding: 1px;
+        }
+
+        .card:hover::before {
+            opacity: 1;
+        }
+
+        .card:hover::after {
+            opacity: 0.6;
+        }
+
+        .card:hover {
+            border-color: transparent;
+            transform: translateY(-3px) scale(1.01);
+            box-shadow: 0 12px 40px rgba(0, 0, 0, 0.4), 0 0 30px rgba(0, 240, 255, 0.04);
+        }
+
+        .card-icon {
+            flex-shrink: 0;
+            width: 44px;
+            height: 44px;
+            border-radius: 10px;
+            background: rgba(0, 240, 255, 0.06);
+            border: 1px solid rgba(0, 240, 255, 0.08);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--cyan);
+            transition: all 0.3s;
+        }
+
+        .card:hover .card-icon {
+            background: rgba(0, 240, 255, 0.10);
+            border-color: rgba(0, 240, 255, 0.20);
+            box-shadow: 0 0 16px rgba(0, 240, 255, 0.08);
+        }
+
+        .card-icon svg {
+            width: 20px;
+            height: 20px;
+        }
+
+        .card-body {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .card-body .name {
+            font-family: 'Inter', sans-serif;
+            font-weight: 500;
+            font-size: 0.95rem;
+            color: var(--text-primary);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            transition: color 0.3s;
+        }
+
+        .card:hover .card-body .name {
+            color: #fff;
+        }
+
+        .card-body .meta {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.4rem;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.6rem;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: var(--text-secondary);
+            opacity: 0.5;
+            margin-top: 0.2rem;
+        }
+
+        .card-body .meta .divider {
+            width: 3px;
+            height: 3px;
+            border-radius: 50%;
+            background: var(--text-secondary);
+            opacity: 0.3;
+        }
+
+        .card-action {
+            flex-shrink: 0;
+        }
+
+        .card-action a {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.4rem;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.7rem;
+            font-weight: 500;
+            letter-spacing: 0.04em;
+            text-transform: uppercase;
+            text-decoration: none;
+            color: var(--cyan);
+            background: rgba(0, 240, 255, 0.06);
+            border: 1px solid rgba(0, 240, 255, 0.12);
+            padding: 0.5rem 1rem;
+            border-radius: 8px;
+            white-space: nowrap;
+            transition: all 0.25s ease;
+        }
+
+        .card-action a:hover {
+            background: rgba(0, 240, 255, 0.12);
+            border-color: rgba(0, 240, 255, 0.30);
+            box-shadow: 0 0 24px rgba(0, 240, 255, 0.10);
+            transform: scale(1.04);
+        }
+
+        .card-action a:active {
+            transform: scale(0.96);
+        }
+
+        .card-action a svg {
+            width: 14px;
+            height: 14px;
+            transition: transform 0.25s;
+        }
+
+        .card-action a:hover svg {
+            transform: translate(2px, -2px);
+        }
+
+        /* EMPTY STATE */
+        .empty-state {
+            grid-column: 1 / -1;
+            text-align: center;
+            padding: 4rem 2rem;
+            color: var(--text-secondary);
+        }
+
+        .empty-state .empty-icon {
+            width: 60px;
+            height: 60px;
+            margin: 0 auto 1.25rem;
+            border-radius: 50%;
+            background: rgba(0, 240, 255, 0.04);
+            border: 1px solid rgba(0, 240, 255, 0.06);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--text-secondary);
+            opacity: 0.4;
+        }
+
+        .empty-state .empty-icon svg {
+            width: 28px;
+            height: 28px;
+        }
+
+        .empty-state h3 {
+            font-family: 'Inter', sans-serif;
+            font-weight: 500;
+            font-size: 1.05rem;
+            color: var(--text-primary);
+            margin-bottom: 0.4rem;
+        }
+
+        .empty-state p {
+            font-size: 0.85rem;
+            opacity: 0.6;
+        }
+
+        /* FOOTER */
+        .footer {
+            margin-top: 4rem;
+            text-align: center;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.6rem;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+            color: var(--text-secondary);
+            opacity: 0.25;
+        }
+
+        /* RESPONSIVE */
+        @media (max-width: 768px) {
+            .app-layout { flex-direction: column; }
+
+            .sidebar {
+                width: 100%;
+                height: auto;
+                position: relative;
+                max-height: 40vh;
+                border-right: none;
+                border-bottom: 1px solid rgba(0, 240, 255, 0.08);
+            }
+
+            .sidebar.collapsed {
+                width: 0;
+                max-height: 0;
+                min-height: 0;
+                padding: 0;
+                border: none;
+                overflow: hidden;
+                transform: translateX(-100%);
+            }
+
+            .sidebar-open-handle {
+                display: none !important;
+            }
+
+            .content {
+                padding: 1.5rem 1rem 3rem;
+            }
+
+            .search-inner {
+                flex-wrap: wrap;
+                border-radius: 18px;
+                padding: 0.5rem 0.5rem 0.5rem 1rem;
+            }
+
+            .search-inner input {
+                padding: 0.65rem 0;
+                font-size: 0.9rem;
+                width: 100%;
+            }
+
+            .search-inner button {
+                width: 100%;
+                justify-content: center;
+                margin-top: 0.4rem;
+                padding: 0.65rem;
+                font-size: 0.75rem;
+            }
+
+            .search-icon { display: none; }
+
+            .card {
+                padding: 1rem 1.1rem;
+                flex-wrap: wrap;
+                gap: 0.75rem;
+            }
+
+            .card-action {
+                width: 100%;
+            }
+
+            .card-action a {
+                width: 100%;
+                justify-content: center;
+                padding: 0.6rem;
+            }
+
+            .status-bar {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 0.3rem;
+            }
+
+            .content-header {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="scanline"></div>
+
+    <div class="app-layout">
+
+        <!-- ===== SIDEBAR ===== -->
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <div class="sidebar-header-left">
+                    <h2>Explorador</h2>
+                    <div class="sub">// Estrutura de Pastas</div>
+                </div>
+                <button class="sidebar-collapse-btn" id="sidebarCollapseBtn" title="Recolher sidebar">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M17 6l-6 6 6 6"/>
+                        <path d="M11 6l-6 6 6 6"/>
+                    </svg>
+                </button>
+            </div>
+
+            <div class="sidebar-folders" id="folderTree">
+                <!-- Root folder -->
+                <div class="folder-root" th:classappend="${pastaSelecionadaId == FOLDER_ID} ? 'active'">
+                    <a href="/busca">
+                        <span class="root-icon">◈</span>
+                        <span>Todas as Pastas</span>
+                        <span class="root-badge">root</span>
+                    </a>
+                </div>
+                <!-- JS renders subfolders here -->
+            </div>
+        </aside>
+
+        <div class="sidebar-open-handle" id="sidebarOpenHandle" title="Abrir sidebar">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M7 6l6 6-6 6"/>
+                <path d="M13 6l6 6-6 6"/>
+            </svg>
+        </div>
+
+        <!-- ===== MAIN CONTENT ===== -->
+        <main class="content">
+
+            <!-- Header -->
+            <div class="content-header">
+                <div>
+                    <div class="breadcrumb">
+                        <span>Explorador</span>
+                        <span class="sep">▸</span>
+                        <strong th:text="${nomePasta}">Pasta</strong>
+                    </div>
+                    <h1 class="content-title" th:if="${termoBuscado != null and !termoBuscado.isEmpty()}">
+                        Resultados para &ldquo;<span th:text="${termoBuscado}">termo</span>&rdquo;
+                    </h1>
+                </div>
+            </div>
+
+            <!-- SEARCH -->
+            <section class="search-section">
+                <div class="search-wrapper">
+                    <div class="search-inner">
+                        <span class="search-icon">
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" />
+                            </svg>
+                        </span>
+                        <form th:action="@{/busca}" method="get" style="display:contents;flex:1">
+                            <input type="text" name="termo" th:value="${termoBuscado}" placeholder="Pesquisar em todas as pastas..." autofocus />
+                            <button type="submit">
+                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607ZM10.5 7.5v6m3-3h-6" />
+                                </svg>
+                                Buscar
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            </section>
+
+            <!-- STATUS -->
+            <div class="status-bar">
+                <span class="count" th:if="${not #lists.isEmpty(partituras)}">
+                    <strong th:text="${#lists.size(partituras)}">0</strong> resultado<span th:if="${#lists.size(partituras) != 1}">s</span> encontrado<span th:if="${#lists.size(partituras) != 1}">s</span>
+                </span>
+                <span class="count" th:if="${#lists.isEmpty(partituras)}">
+                    <strong>0</strong> resultados encontrados
+                </span>
+                <span class="label">// ACERVO DIGITAL</span>
+            </div>
+
+            <!-- GRID -->
+            <div class="grid">
+                <div class="card" th:each="arquivo : ${partituras}">
+                    <div class="card-icon">
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" />
+                        </svg>
+                    </div>
+                    <div class="card-body">
+                        <div class="name" th:text="${arquivo.name}">Nome da Partitura</div>
+                        <div class="meta">
+                            <span>Partitura</span>
+                            <span class="divider"></span>
+                            <span>Google Drive</span>
+                        </div>
+                    </div>
+                    <div class="card-action">
+                        <a th:href="@{'https://drive.google.com/file/d/' + ${arquivo.id} + '/view?usp=sharing'}" target="_blank" rel="noopener noreferrer">
+                            Abrir
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M13.5 6H5.25A2.25 2.25 0 0 0 3 8.25v10.5A2.25 2.25 0 0 0 5.25 21h10.5A2.25 2.25 0 0 0 18 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" />
+                            </svg>
+                        </a>
+                    </div>
+                </div>
+
+                <!-- EMPTY -->
+                <div class="empty-state" th:if="${#lists.isEmpty(partituras)}">
+                    <div class="empty-icon">
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.2">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607ZM10.5 7.5v6m3-3h-6" />
+                        </svg>
+                    </div>
+                    <h3>Nenhuma partitura encontrada</h3>
+                    <p>Tente alterar o termo da busca ou navegue pelas pastas ao lado.</p>
+                </div>
+            </div>
+
+            <!-- FOOTER -->
+            <div class="footer">
+                <span>Sistema de Partituras &mdash; Busca Integrada Google Drive</span>
+            </div>
+
+        </main>
+    </div>
+
+    <script>
+        (function() {
+            var tree = ARVORE_PASTAS;
+            var selectedId = PASTA_SELECIONADA_ID;
+            var container = document.getElementById('folderTree');
+            if (!tree || !container) return;
+
+            var STORAGE_KEY = 'sistemaPartiturasPastasAbertas';
+
+            function getOpenedSet() {
+                try {
+                    var data = JSON.parse(localStorage.getItem(STORAGE_KEY));
+                    return Array.isArray(data) ? new Set(data) : new Set();
+                } catch (e) { return new Set(); }
+            }
+
+            function saveOpenedSet(set) {
+                localStorage.setItem(STORAGE_KEY, JSON.stringify(Array.from(set)));
+            }
+
+            function findAncestors(folders, targetId) {
+                var result = [];
+                function walk(list, path) {
+                    for (var i = 0; i < list.length; i++) {
+                        var f = list[i];
+                        var current = path.concat(f.id);
+                        if (f.id === targetId) {
+                            for (var j = 0; j < current.length - 1; j++) {
+                                result.push(current[j]);
+                            }
+                            return true;
+                        }
+                        if (f.subpastas && f.subpastas.length > 0) {
+                            if (walk(f.subpastas, current)) return true;
+                        }
+                    }
+                    return false;
+                }
+                walk(folders, []);
+                return result;
+            }
+
+            var openedSet = getOpenedSet();
+
+            if (selectedId) {
+                var ancestors = findAncestors(tree, selectedId);
+                ancestors.forEach(function(id) { openedSet.add(id); });
+                openedSet.add(selectedId);
+                saveOpenedSet(openedSet);
+            }
+
+            function renderTree(folders, parentEl, level) {
+                folders.forEach(function(folder) {
+                    var item = document.createElement('div');
+                    item.className = 'folder-item';
+                    if (folder.id === selectedId) item.classList.add('active');
+                    item.style.paddingLeft = (16 + level * 20) + 'px';
+
+                    var hasChildren = folder.subpastas && folder.subpastas.length > 0;
+                    var isOpen = openedSet.has(folder.id);
+
+                    var arrow = document.createElement('span');
+                    arrow.className = 'folder-arrow';
+                    if (hasChildren) {
+                        arrow.classList.add('has');
+                        arrow.textContent = isOpen ? '\u25BC' : '\u25B6';
+                    } else {
+                        arrow.classList.add('empty');
+                        arrow.textContent = '\u25B6';
+                    }
+
+                    var icon = document.createElement('span');
+                    icon.className = 'folder-icon';
+                    icon.textContent = '\uD83D\uDCC1';
+
+                    var label = document.createElement('span');
+                    label.className = 'folder-label';
+                    label.textContent = folder.nome;
+
+                    var link = document.createElement('a');
+                    link.className = 'folder-link';
+                    link.href = '/busca?pastaId=' + encodeURIComponent(folder.id);
+                    link.appendChild(icon);
+                    link.appendChild(label);
+
+                    item.appendChild(arrow);
+                    item.appendChild(link);
+                    parentEl.appendChild(item);
+
+                    if (hasChildren) {
+                        var childrenWrapper = document.createElement('div');
+                        childrenWrapper.className = 'folder-children';
+                        if (!isOpen) childrenWrapper.classList.add('collapsed');
+                        parentEl.appendChild(childrenWrapper);
+                        renderTree(folder.subpastas, childrenWrapper, level + 1);
+
+                        function toggleFolder() {
+                            var currentlyOpen = openedSet.has(folder.id);
+                            if (currentlyOpen) {
+                                openedSet.delete(folder.id);
+                                childrenWrapper.classList.add('collapsed');
+                                arrow.textContent = '\u25B6';
+                            } else {
+                                openedSet.add(folder.id);
+                                childrenWrapper.classList.remove('collapsed');
+                                arrow.textContent = '\u25BC';
+                            }
+                            saveOpenedSet(openedSet);
+                        }
+
+                        arrow.addEventListener('click', function(e) {
+                            e.stopPropagation();
+                            toggleFolder();
+                        });
+
+                        label.addEventListener('click', function(e) {
+                            e.stopPropagation();
+                            toggleFolder();
+                        });
+                    }
+                });
+            }
+
+            renderTree(tree, container, 0);
+
+            // ── Sidebar collapse toggle ──
+            var sidebarEl = document.querySelector('.sidebar');
+            var collapseBtn = document.getElementById('sidebarCollapseBtn');
+            var openHandle = document.getElementById('sidebarOpenHandle');
+            var SIDEBAR_STORAGE_KEY = 'sistemaPartiturasSidebarCollapsed';
+
+            function getSidebarState() {
+                try {
+                    return localStorage.getItem(SIDEBAR_STORAGE_KEY) === 'true';
+                } catch (e) { return false; }
+            }
+
+            function setSidebarState(collapsed) {
+                try {
+                    localStorage.setItem(SIDEBAR_STORAGE_KEY, collapsed ? 'true' : 'false');
+                } catch (e) {}
+            }
+
+            function toggleSidebar(collapsed) {
+                var isCollapsed = (collapsed !== undefined) ? collapsed : sidebarEl.classList.contains('collapsed');
+                if (collapsed !== undefined) {
+                    if (isCollapsed) {
+                        sidebarEl.classList.add('collapsed');
+                    } else {
+                        sidebarEl.classList.remove('collapsed');
+                    }
+                } else {
+                    sidebarEl.classList.toggle('collapsed');
+                    isCollapsed = sidebarEl.classList.contains('collapsed');
+                }
+                setSidebarState(isCollapsed);
+            }
+
+            // Restore sidebar state on load
+            if (getSidebarState()) {
+                sidebarEl.classList.add('collapsed');
+            }
+
+            collapseBtn.addEventListener('click', function() {
+                toggleSidebar(true);
+            });
+
+            openHandle.addEventListener('click', function() {
+                toggleSidebar(false);
+            });
+        })();
+    </script>
+
+</body>
+</html>
