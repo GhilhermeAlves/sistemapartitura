@@ -1,0 +1,11 @@
+services:
+  - type: web
+    name: acervo-partituras
+    runtime: docker
+    plan: free
+    healthCheckPath: /actuator/health
+    envVars:
+      - key: GOOGLE_APPLICATION_CREDENTIALS
+        value: /etc/secrets/google-credentials.json
+      - key: PARTITURAS_FOLDER_ID
+        value: 1BwFnb28EgRYPak9W_N2iXuPjg-wqxrXX
