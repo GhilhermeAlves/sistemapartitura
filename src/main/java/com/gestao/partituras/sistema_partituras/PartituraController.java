@@ -38,6 +38,7 @@ public class PartituraController {
         String pastaSelecionada = raiz;
         String nomePasta = "Todas as Pastas";
         List<PartituraService.Partitura> partituras = List.of();
+        List<PartituraService.PastaItem> pastas = List.of();
         List<PartituraService.PastaItem> arvore = List.of();
         String erro = null;
 
@@ -55,9 +56,14 @@ public class PartituraController {
                 }
             }
 
-            partituras = (termoLimpo != null)
-                    ? partituraService.buscar(termoLimpo)
-                    : partituraService.listarPasta(pastaSelecionada);
+            if (termoLimpo != null) {
+                // Busca: procura em todo o acervo
+                partituras = partituraService.buscar(termoLimpo);
+            } else {
+                // Navegação: mostra só o conteúdo direto da pasta (subpastas + arquivos)
+                pastas = partituraService.subpastas(pastaSelecionada);
+                partituras = partituraService.arquivosDaPasta(pastaSelecionada);
+            }
 
         } catch (PartituraService.AcervoIndisponivelException e) {
             log.error("Erro ao carregar acervo", e);
@@ -66,6 +72,7 @@ public class PartituraController {
 
         model.addAttribute("arvorePastas", arvore);
         model.addAttribute("nomePasta", nomePasta);
+        model.addAttribute("pastas", pastas);
         model.addAttribute("partituras", partituras);
         model.addAttribute("termoBuscado", termoLimpo);
         model.addAttribute("pastaSelecionadaId", pastaSelecionada);

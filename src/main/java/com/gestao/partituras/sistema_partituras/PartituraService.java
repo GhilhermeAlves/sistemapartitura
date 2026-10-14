@@ -70,6 +70,21 @@ public class PartituraService {
         return Optional.ofNullable(acervo().nomesPastas().get(pastaId));
     }
 
+    /** Subpastas imediatas da pasta (um nível), em ordem alfabética. */
+    public List<PastaItem> subpastas(String pastaId) {
+        Acervo a = acervo();
+        return a.filhosPorPasta().getOrDefault(pastaId, List.of()).stream()
+                .map(id -> new PastaItem(id, a.nomesPastas().get(id), List.of(), 0))
+                .toList();
+    }
+
+    /** Arquivos que estão diretamente na pasta (sem descer nas subpastas). */
+    public List<Partitura> arquivosDaPasta(String pastaId) {
+        List<Partitura> resultado = new ArrayList<>(acervo().arquivosPorPasta().getOrDefault(pastaId, List.of()));
+        resultado.sort(POR_NOME);
+        return resultado;
+    }
+
     /** Todos os arquivos da pasta e de suas subpastas, em ordem alfabética. */
     public List<Partitura> listarPasta(String pastaId) {
         Acervo a = acervo();

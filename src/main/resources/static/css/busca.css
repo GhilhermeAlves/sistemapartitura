@@ -214,3 +214,8 @@ button { font: inherit; color: inherit; background: none; border: 0; cursor: poi
     .item-open { opacity: 1; }
 }
 
+
+/* ===== Pastas na lista central ===== */
+.item-folder { width: 18px; height: 18px; flex-shrink: 0; color: var(--ink-soft); }
+.item-pasta .item-name { font-family: var(--serif); font-size: 19px; font-weight: 600; }
+.item-pasta:hover .item-folder { color: var(--accent); }

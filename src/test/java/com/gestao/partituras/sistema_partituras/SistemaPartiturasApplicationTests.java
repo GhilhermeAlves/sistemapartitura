@@ -34,12 +34,14 @@ class SistemaPartiturasApplicationTests {
 	void listaPastaRaizPorPadrao() throws Exception {
 		when(service.pastaRaizId()).thenReturn(RAIZ);
 		when(service.arvorePastas()).thenReturn(List.of());
-		when(service.listarPasta(RAIZ)).thenReturn(List.of(new PartituraService.Partitura("abc", "Ave Maria.pdf")));
+		when(service.subpastas(RAIZ)).thenReturn(List.of(new PartituraService.PastaItem("p1", "Natal", List.of(), 0)));
+		when(service.arquivosDaPasta(RAIZ)).thenReturn(List.of(new PartituraService.Partitura("abc", "Ave Maria.pdf")));
 
 		mvc.perform(get("/busca"))
 				.andExpect(status().isOk())
 				.andExpect(content().string(org.hamcrest.Matchers.containsString("Ave Maria.pdf")))
-				.andExpect(content().string(org.hamcrest.Matchers.containsString("https://drive.google.com/file/d/abc/view")));
+				.andExpect(content().string(org.hamcrest.Matchers.containsString("https://drive.google.com/file/d/abc/view")))
+				.andExpect(content().string(org.hamcrest.Matchers.containsString("/busca?pastaId=p1")));
 	}
 
 	@Test
@@ -53,7 +55,7 @@ class SistemaPartiturasApplicationTests {
 				.andExpect(model().attribute("pastaSelecionadaId", RAIZ))
 				.andExpect(model().attribute("erro", "Pasta não encontrada no acervo."));
 
-		verify(service, never()).listarPasta("x' in parents or '");
+		verify(service, never()).arquivosDaPasta("x' in parents or '");
 	}
 
 	@Test
